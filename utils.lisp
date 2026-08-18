@@ -593,7 +593,7 @@
 (defun rmapcar (function sequence)
   "Recursive version of mapcar for a single SEQUENCE (of sequences) argument."
   (mapcar #'(lambda (element)
-              (if (sequencep element)
+              (if (typep element 'sequence)
                 (rmapcar function element)
                 (funcall function element)))
           (coerce sequence 'list)))

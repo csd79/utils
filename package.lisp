@@ -5,7 +5,7 @@
 
 
 (defpackage #:utils
-  (:use #:cl #:str #:local-time #:edit-distance)
+  (:use #:cl #:str #:local-time #:edit-distance #:achar)
   (:export
    #:user-homedir
    #:appdir
