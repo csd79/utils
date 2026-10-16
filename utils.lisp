@@ -381,15 +381,24 @@
 
 
 (defun string->symbol (arg)
-  "If ARG is a string, convert it to a symbol."
+  "If ARG is a string, convert it into a symbol."
   (typecase arg
     (symbol arg)
     (string (intern (string-upcase arg)))
     (t      nil)))
 
 
+(defun string->keyword (arg)
+  "If ARG is a string or a symbol, convert in into a keyword symbol."
+  (let ((keyword-package (find-package "KEYWORD")))
+    (typecase arg
+      (symbol (intern (symbol-name arg) keyword-package))
+      (string (intern (string-upcase arg) keyword-package))
+      (t      nil))))
+
+
 (defun symbol->string (arg)
-  "If ARG is a symbol, convert it to a string."
+  "If ARG is a (keyword) symbol, convert it to a string."
   (typecase arg
     (symbol (symbol-name arg))
     (string arg)
@@ -426,8 +435,9 @@
 
 (defun remove-illegal-filename-chars (string)
   "Remova chars from STRING that are illegal in a Windows filename."
-  (let ((illegals '(#\< #\> #\: #\" #\/ #\\ #\| #\? #\*
+  (let ((illegals '(#\< #\> #\: #\" #\/ #\\ #\| #\? #\* #\~
                     #\# #\% #\& #\{ #\} #\$ #\! #\' #\@ #\+ #\` #\=
+                    #\Newline
                     ))
         (copy     (copy-seq string)))
     (mapc #'(lambda (char) (setf copy (delete char copy :test #'char=))) illegals)
@@ -532,19 +542,6 @@
 ;; File operations on local copies
 
 
-#|(defun with-local-copy-parts (clauses)
-  (let ((gensyms (loop for i from 0 below (length clauses) collecting (gensym))))
-    (loop for (var path ro) in clauses
-          for orig in gensyms
-          collecting `((,orig ,path) (,var (new-temp-filename (pathname-type ,orig))))
-          into let-clauses
-          collecting `(uiop:copy-file ,orig ,var)
-          into copy-clauses
-          collecting (if ro `(delete-file ,var) `(rename-file ,var ,orig))
-          into restore-clauses
-          finally (return (values (apply #'append let-clauses)
-                                  copy-clauses
-                                  (reverse restore-clauses))))))|#
 (defun wlc-parts (clauses)
   (let ((gensyms (loop for i from 0 below (length clauses) collecting (gensym)))
         (lets '()) (copys '()) (restores '()))
@@ -561,6 +558,23 @@
 
 
 (defmacro with-local-copies (clauses &body body)
+  "Operate on fileS using local copies in user's temp dir."
+#|
+Clause:
+(temp-file-handle permanent-file-path &key (READ-ONLY nil) (NEW-FILE nil))
+
+(WITH-LOCAL-COPES ((inf/  input-file  :READ-ONLY T)
+                   (outf/ output-file :NEW-FILE  T))
+  ...)
+
+At the end of WITH-LOCAL-COPIES, if READ-ONLY is T, the temporary file is deleted;
+if it is NIL, the permanent file is overwritten with the temporary file.
+
+At the beginning of WITH-LOCAL-COPIES, if NEW-FILE is NIL, the temporary file
+will be a copy of the permanent file in the user's temp dir; if it is T, the temporary
+file will not be a copy of the permanent file - it will be created as a new file
+in the body of WITH-LOCAL-COPES istead.
+|#
   (multiple-value-bind (let/ copy/ reverse/)
       (wlc-parts clauses)
     `(let* ,let/

@@ -37,6 +37,7 @@
    #:sub->words
    #:currency
    #:string->symbol
+   #:string->keyword
    #:symbol->string
    #:string-similarity
    #:*string-similarity-threshold*
