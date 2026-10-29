@@ -236,6 +236,10 @@
 ;; Date, time
 
 
+(defparameter *extra-holidays* '())
+(defparameter *extra-workdays* '())
+
+
 (defun timestamp (ut &key (timeshift 1))
   "Convert unversal time to ISO-8601."
   (let* ((timestamp  (local-time:timestamp+
@@ -319,6 +323,98 @@
 
 (deftype hudate-parsable ()
   `(and string (satisfies hudate-parsable-p)))
+
+
+(defun leap-year-p (year)
+  "Is YEAR a leap year?"
+  (or (zerop (mod year 400))
+      (and (zerop (mod year 4))
+           (not (zerop (mod year 100))))))
+
+
+(defun weekend-p (hudate)
+  "Is HUDATE a Saturday or Sunday?"
+  (multiple-value-bind (second minute hour date month year day daylight-p zone)
+      (decode-universal-time (hudate->unitime hudate))
+    (declare (ignore second minute hour date month year daylight-p zone))
+    (member day '(5 6))))
+
+
+(defun extra-holiday-p (hudate)
+  "Does HUDATE appear in *EXTRA-HOLIDAYS* (of datestrings formated 'yyyy.mm.dd')?"
+  (some #'(lambda (datestring)
+            (equal hudate (parse-hudate datestring)))
+        *extra-holidays*))
+
+
+(defun extra-workday-p (hudate)
+  "Does HUDATE appear in *EXTRA-WORKDAYS* (of datestrings formated 'yyyy.mm.dd')?"
+  (some #'(lambda (datestring)
+            (equal hudate (parse-hudate datestring)))
+        *extra-workdays*))
+
+
+(defun actual-workday-p (hudate)
+  "Is HUDATE a workday (considering extra workdays/holidays)?"
+  (or (extra-workday-p hudate)
+      (not (or (extra-holiday-p hudate)
+               (weekend-p hudate)))))
+
+
+(defun last-day-of-week (hudate)
+  "What is the hudate of the Sunday of the week of HUDATE?"
+  (destructuring-bind (year/ month/ day/)
+      hudate
+    (let* ((ut-today  (encode-universal-time 0 0 12 day/ month/ year/))
+           (day-today (seventh (multiple-value-list (decode-universal-time ut-today)))))
+      (nreverse (subseq (multiple-value-list (decode-universal-time (+ ut-today (* (- 6 day-today) 86400))))
+                        3 6)))))
+
+
+(defun last-workday-of-week (hudate)
+  "What is the hudate of the last workday of the week of HUDATE?"
+  (let ((ut-sunday (apply #'encode-universal-time 0 0 0 (reverse (last-day-of-week hudate)))))
+    (loop for ldut from ut-sunday downto (- ut-sunday (* 6 86400)) by 86400
+          for rhudate = (subseq (multiple-value-list (decode-universal-time ldut)) 3 6)
+          for hd = (nreverse rhudate)
+          until (actual-workday-p hd)
+          finally (return hd))))
+
+
+(defun last-workday-of-week-p (hudate)
+  "Is HUDATE the last workday of its week?"
+  (equalp hudate (last-workday-of-week hudate)))
+
+
+(defun short-weekday (weekday)
+  "Short hungarian names of weekdays."
+  (cdr (assoc weekday (list (cons "Hétfõ" "H") (cons "Kedd" "K")
+                            (cons "Szerda" "Sze") (cons "Csütörtök" "Cs")
+                            (cons "Péntek" "P") (cons "Szombat" "Szo")
+                            (cons "Vasárnap" "V"))
+              :test #'string=)))
+
+
+(defun extort-tz (location-name)
+  "Loading timezones in LOCAL-TIME doesn't work on Windows. This is a dirty patch."
+  (let* ((repo-path local-time::*default-timezone-repository-path*)
+         ;; Merge the location name into the Quicklisp zoneinfo directory
+         (tz-file-path (merge-pathnames location-name repo-path)))
+    ;; This reads the binary "TZif2" file directly and loads it into memory
+    (local-time::%realize-timezone 
+     (local-time::make-timezone :name location-name 
+                                :path tz-file-path)
+     t)))
+
+
+(defun set-tz (location-name &key (reread-repo nil))
+  "Setting up timezone for LOCAL-TIME calls."
+  (when reread-repo
+    (local-time:reread-timezone-repository))
+  (setf local-time:*default-timezone*
+        (extort-tz location-name)))
+
+
 
 
 ;; ----------------------------------------------------------------------

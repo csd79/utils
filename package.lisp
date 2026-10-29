@@ -33,6 +33,19 @@
    #:valid-date-p
    #:well-formed-hudate-p
    #:hudate-parsable-p
+   #:*extra-holidays*
+   #:*extra-workdays*
+   #:leap-year-p
+   #:weekend-p
+   #:extra-holiday-p
+   #:extra-workday-p
+   #:actual-workday-p
+   #:last-day-of-week
+   #:last-workday-of-week
+   #:last-workday-of-week-p
+   #:short-weekday
+   #:extort-tz
+   #:set-tz
    #:group->word
    #:sub->words
    #:currency
